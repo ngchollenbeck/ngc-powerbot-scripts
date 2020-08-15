@@ -1,21 +1,22 @@
 package scripts.mining_allminer;
 
+import org.powerbot.script.*;
+import org.powerbot.script.rt4.ClientContext;
+import org.powerbot.script.rt4.Constants;
+import shared.actions.ShiftDropInventory;
 import shared.constants.GameObjects;
 import shared.constants.Items;
 import shared.templates.AbstractAction;
+import shared.tools.AntibanTools;
 import shared.tools.CommonActions;
-import org.powerbot.script.MessageEvent;
-import org.powerbot.script.MessageListener;
-import org.powerbot.script.PaintListener;
-import org.powerbot.script.PollingScript;
-import org.powerbot.script.rt4.ClientContext;
-import org.powerbot.script.rt4.Constants;
+import shared.tools.GaussianTools;
 
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Callable;
 
-
+@Script.Manifest(name = "All Miner", description = "High Alch on noted items", properties = "client=4")
 public class _AllMiner extends PollingScript<ClientContext> implements PaintListener, MessageListener {
 
     public List<AbstractAction> tasks = new ArrayList<>();
@@ -26,10 +27,14 @@ public class _AllMiner extends PollingScript<ClientContext> implements PaintList
     public int rockId;
     public int[] allOreIds;
 
+    private boolean playerIsMining;
+
     // Xp Config
     public double expGained;
     public int currentLevel;
     public int levelsGained;
+
+    private ShiftDropInventory dropInventory;
 
     // GUI Counters
     public int oreMined;
@@ -45,22 +50,50 @@ public class _AllMiner extends PollingScript<ClientContext> implements PaintList
         loadLocationConfig();
 
         // Go!
+        dropInventory = new ShiftDropInventory(ctx);
+
     }
 
     @Override
     public void poll() {
-        for( AbstractAction action : tasks ) {
-            if( action.activate() ) {
-                status = action.getStatus();
-                action.execute();
+        if (ctx.inventory.isFull()) {
+            dropInventory.execute();
+        } else if (ctx.objects.select().id(rockId).nearest().poll().inViewport() && !playerIsMining && !dropInventory.activate()) {
+            AntibanTools.sleepDelay(AntibanTools.getRandomInRange(0, 4));
+
+            var rock = ctx.objects.select().id(rockId).nearest().poll(); //5k
+            
+
+            rock.interact("Mine");
+
+            Condition.wait(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    return playerIsMining;
+                }
+            }, 200, 10);
+
+            if (GaussianTools.takeActionNormal()) {
+                AntibanTools.moveMouseOffScreen(ctx, false);
+
+                AntibanTools.sleepDelay(AntibanTools.getRandomInRange(0, 4));
             }
         }
+
 
     }
 
     @Override
     public void messaged(MessageEvent messageEvent) {
+        String msg = messageEvent.text().toLowerCase();
 
+        if (msg.contains("you swing your pick")) {
+            this.playerIsMining = true;
+        }
+
+        if (msg.contains("you manage to mine some")) {
+            this.playerIsMining = false;
+        }
     }
 
     @Override
@@ -79,12 +112,12 @@ public class _AllMiner extends PollingScript<ClientContext> implements PaintList
     }
 
     public void loadLocationConfig() {
-        String location = CommonActions.promptForSelection("Location", "Location?", "Barbarian Village", "Mining Guild");
+        String location = CommonActions.promptForSelection("Location", "Location?", new String[]{"Barbarian Village", "Mining Guild", "Other"});
 
-        if( location.equalsIgnoreCase("barbarian village") ) {
-            barbVillageConfig(new String[] {"Tin", "Coal"});
+        if (location.equalsIgnoreCase("barbarian village")) {
+            barbVillageConfig(new String[]{"Tin", "Coal"});
         } else {
-            miningGuildConfig(new String[] {"Silver", "Gold", "Coal", "Mithril", "Adamant"});
+            miningGuildConfig(new String[]{"Silver", "Gold", "Coal", "Mithril", "Adamant"});
         }
     }
 
@@ -106,9 +139,10 @@ public class _AllMiner extends PollingScript<ClientContext> implements PaintList
     public void orePrompt(String[] oreNames) {
         String oreName = CommonActions.promptForSelection("Ore Selection", "Ore Selection", oreNames);
 
-        switch( oreName ) {
+        switch (oreName) {
             case "Tin":
                 oreId = Items.TIN_ORE_438;
+                rockId = 11361;
                 break;
             case "Coal":
                 oreId = Items.COAL_453;
@@ -124,6 +158,8 @@ public class _AllMiner extends PollingScript<ClientContext> implements PaintList
                 oreId = 0;
                 break;
         }
+
+
     }
 
 }

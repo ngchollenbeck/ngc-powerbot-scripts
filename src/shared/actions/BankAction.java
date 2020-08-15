@@ -1,14 +1,11 @@
 package shared.actions;
 
-import shared.templates.AbstractAction;
 import org.powerbot.script.Area;
 import org.powerbot.script.Condition;
 import org.powerbot.script.Random;
 import org.powerbot.script.rt4.Bank;
 import org.powerbot.script.rt4.ClientContext;
 import shared.templates.StructuredAction;
-import shared.tools.AntibanTools;
-import shared.tools.CommonAreas;
 
 import java.util.concurrent.Callable;
 
@@ -113,27 +110,34 @@ public class BankAction extends StructuredAction {
                 // Withdraw
                 if (getPrimaryWithdrawId() > 0) {
 
-                    // Check Quantity
-                    if (getPrimaryWithdrawQty() == 28) {
-                        ctx.bank.withdraw(getPrimaryWithdrawId(), Bank.Amount.ALL);
-                    } else {
-                        if (getPrimaryWithdrawQty() > 0) {
-                            ctx.bank.withdraw(getPrimaryWithdrawId(), Bank.Amount.X);
+                    if (ctx.bank.select().id(this::getPrimaryWithdrawId).poll().valid()) {
+
+                        // Check Quantity
+                        if (getPrimaryWithdrawQty() == 28) {
+                            ctx.bank.withdraw(getPrimaryWithdrawId(), Bank.Amount.ALL);
                         } else {
-                            ctx.bank.select().id(getPrimaryWithdrawId()).poll().click(); // Uses selected qty
+                            if (getPrimaryWithdrawQty() > 0) {
+                                ctx.bank.withdraw(getPrimaryWithdrawId(), Bank.Amount.X);
+                            } else {
+                                ctx.bank.select().id(getPrimaryWithdrawId()).poll().click(); // Uses selected qty
+                            }
                         }
+                    }
+
+                    if (ctx.bank.select().id(this::getSecondaryWithdrawId).poll().valid()) {
 
                         // Check secondary withdraw if primary quantity less than full inventory
                         if (getSecondaryWithdrawId() > 0) {
-                            ctx.bank.withdraw(getSecondaryDepositId(), Bank.Amount.X);//.select().id(getSecondaryWithdrawId()).poll().click(); // Uses X qty
+                            ctx.bank.withdraw(getSecondaryDepositId(), Bank.Amount.ALL);//.select().id(getSecondaryWithdrawId()).poll().click(); // Uses X qty
                         }
                     }
                 }
 
                 // Close if needed
                 if (isCloseWhenDone() && ctx.bank.open()) {
-                    ctx.bank.close();
+                    ctx.input.send("{VK_ESCAPE  down}");
                     sleep(Random.nextInt(400, 1200));
+                    ctx.input.send("{VK_ESCAPE up}");
                 }
             }
         }

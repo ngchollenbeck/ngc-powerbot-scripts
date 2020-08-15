@@ -1,9 +1,8 @@
 package shared.actions;
 
-import shared.templates.AbstractAction;
-import shared.tools.AntibanTools;
 import org.powerbot.script.Random;
 import org.powerbot.script.rt4.ClientContext;
+import shared.templates.AbstractAction;
 
 import static org.powerbot.script.Condition.sleep;
 
@@ -62,7 +61,7 @@ public class ShiftDropInventory extends AbstractAction<ClientContext> {
             ctx.input.send("{VK_SHIFT down}");
             int itemIndex = index - 1;
             ctx.inventory.items()[itemIndex].click();
-            AntibanTools.sleepDelay(Random.nextInt(1, 2));
+            sleep(Random.nextInt(100, 250));
         }
     }
 

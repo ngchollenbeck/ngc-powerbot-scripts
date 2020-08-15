@@ -340,4 +340,14 @@ public class AntibanTools {
             default:doNothing();
         }
     }
+
+    public static void runMiningAntiban(ClientContext ctx){
+        switch(AntibanTools.getRandomInRange(1, 5)){
+            case 1: moveMouseOffScreen(ctx, true); break;
+            case 2: moveMouseOffScreen(ctx, false); break;
+            case 3: hoverRandomNPC(ctx); break;
+            case 4: jiggleMouse(ctx); break;
+            default:doNothing();
+        }
+    }
 }

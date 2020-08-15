@@ -80,10 +80,6 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
         if (msg.contains("swing your pick at the rock.")) {
             this.playerIsMining = true;
         }
-
-//        if (msg.contains("manage to mine some pay-dirt.")) {
-//
-//        }
     }
     //endregion
 
@@ -95,7 +91,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
             g.drawString("Phase  : " + (this.scriptConfig.getPhase()), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(1));
             g.drawString("Runtime: " + GuiHelper.getReadableRuntime(getRuntime()), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(2));
-            g.drawString("Mining: " + ctx.skills.realLevel(Constants.SKILLS_MINING), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(4));
+            g.drawString("Level: " + ctx.skills.realLevel(Constants.SKILLS_MINING), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(4));
         }
     }
     //endregion
@@ -212,7 +208,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                             public Boolean call() throws Exception {
                                 return !isStrutBroken();
                             }
-                        }, 300, 20);
+                        }, Random.nextInt(250, 400), 20);
                     }
 
                 }
@@ -249,9 +245,9 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
         if (GaussianTools.takeActionNormal()) {
             this.scriptConfig.setPhase("Antiban");
             this.scriptConfig.setStep("Wait");
-            AntibanTools.runCommonAntiban(ctx);
+            AntibanTools.runMiningAntiban(ctx);
         }
-        this.nextBreak = getRuntime() + (AntibanTools.getRandomInRange(9, 13) * 60000);
+        this.nextBreak = getRuntime() + (AntibanTools.getRandomInRange(4, 17) * 60000);
     }
 
     private boolean activateAntiban() {
@@ -292,14 +288,14 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                             public Boolean call() throws Exception {
                                 return ctx.players.local().inMotion();
                             }
-                        }, 200, 10);
+                        }, Random.nextInt(175, 300), 10);
 
                         Condition.wait(new Callable<Boolean>() {
                             @Override
                             public Boolean call() throws Exception {
                                 return !playerIsMining || !ctx.players.local().inMotion();
                             }
-                        }, 600, 10);
+                        }, Random.nextInt(400, 800), 10);
 
                         if (playerIsMining) {
 
@@ -314,7 +310,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                                     return !isOreVeinValid() || !playerIsMining || ctx.inventory.isFull(); // not valid or couldn't reach it due to landslide
 
                                 }
-                            }, 1250, 65);
+                            }, Random.nextInt(1000, 2000), 65);
                         }
                     }
                 }
@@ -328,7 +324,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                     public Boolean call() throws Exception {
                         return vein.tile().distanceTo(ctx.players.local()) == 1 || !ctx.players.local().inMotion();
                     }
-                }, 100, 20);
+                }, Random.nextInt(100, 200), 20);
             }
         }
     }
@@ -376,7 +372,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
             public Boolean call() throws Exception {
                 return !ctx.inventory.isFull();
             }
-        }, 500, 20);
+        }, Random.nextInt(250, 600), 20);
 
         sleep(Random.nextInt(250, 1250));
 
@@ -391,7 +387,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                     public Boolean call() throws Exception {
                         return ctx.inventory.select().id(Items.HAMMER_2347).count() == 1;
                     }
-                }, 1000, 10);
+                }, Random.nextInt(800, 1200), 10);
             }
         }
     }
@@ -419,7 +415,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return strut.inViewport();
                 }
-            }, 350, 10);
+            }, Random.nextInt(300, 400), 10);
         }
 
         strut.interact("Hammer");
@@ -436,7 +432,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return sack.inViewport() && sack.tile().distanceTo(ctx.players.local()) < 3;
                 }
-            }, 200, 30);
+            }, Random.nextInt(150, 250), 30);
 
             this.emptySack();
         } else {
@@ -446,7 +442,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return ctx.inventory.select().id(ores).count() > 0;
                 }
-            }, 260, 40);
+            }, Random.nextInt(250, 350), 40);
         }
     }
 
@@ -465,7 +461,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return ctx.depositBox.opened();
                 }
-            }, 450, 10);
+            }, Random.nextInt(400, 600), 10);
 
             sleep();
 
@@ -476,7 +472,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return ctx.inventory.isEmpty() || ctx.depositBox.isEmpty();
                 }
-            }, 200, 10);
+            }, Random.nextInt(150, 300), 10);
 
             ctx.depositBox.close();
         } else {
@@ -486,7 +482,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return depositBox.inViewport();
                 }
-            }, 100, 10);
+            }, Random.nextInt(100, 200), 10);
         }
     }
     //endregion
@@ -517,7 +513,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 public Boolean call() throws Exception {
                     return !rockFall.valid();
                 }
-            }, 250, 20);
+            }, Random.nextInt(200, 321), 20);
         }
 
 
