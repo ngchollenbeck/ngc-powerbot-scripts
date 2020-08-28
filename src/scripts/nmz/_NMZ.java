@@ -27,6 +27,7 @@ public class _NMZ extends PollingScript<ClientContext> implements PaintListener,
     private InteractWithGameObject recurrentDamagePowerUp;
     private InteractWithGameObject zapperPowerUp;
     private boolean overloadRequired;
+    private boolean guzzling;
 
 //    private InteractWithGameObject powerSurgePowerUp;
 
@@ -45,7 +46,7 @@ public class _NMZ extends PollingScript<ClientContext> implements PaintListener,
 
     private long nextBreak;
 
-    private int[] overloadIds = new int[]{Items.OVERLOAD_1_11733, Items.OVERLOAD_2_11732, Items.OVERLOAD_3_11731, Items.OVERLOAD_4_11730};
+    private final int[] overloadIds = new int[]{Items.OVERLOAD_1_11733, Items.OVERLOAD_2_11732, Items.OVERLOAD_3_11731, Items.OVERLOAD_4_11730};
 
     @Override
     public void start() {
@@ -90,8 +91,11 @@ public class _NMZ extends PollingScript<ClientContext> implements PaintListener,
                 status = guzzleRockCake.getStatus();
 //                sleep(Random.nextInt(1000, 50000));
                 guzzleRockCake.execute();
-                lastGuzzleAttemptTimestamp = getRuntime();
-                this.lastGuzzleAttemptHP = 1;
+                if(ctx.combat.health() == 1) {
+                    lastGuzzleAttemptTimestamp = getRuntime();
+                    this.lastGuzzleAttemptHP = 1;
+                    this.guzzling = false;
+                }
                 break;
             case OVERLOAD:
                 status = overloadPotion.getStatus();
@@ -177,15 +181,6 @@ public class _NMZ extends PollingScript<ClientContext> implements PaintListener,
     public void messaged(MessageEvent messageEvent) {
         String msg = messageEvent.text().toLowerCase();
 
-//        if (msg.contains("feel a surge of special attack power") && ctx.inventory.select().id(Items.GRANITE_MAUL_4153).poll().valid()) {
-//            // powerSurgeActive = true;
-//        }
-//
-//        if (msg.contains("surge of special attack power has ended") && powerSurgeActive) {
-//            //   powerSurgeActive = false;
-//            //  unequipPowerSurgeEqupment();
-//        }
-
         if (msg.contains("worn off")) {
             this.overloadRequired = true;
         }
@@ -216,8 +211,10 @@ public class _NMZ extends PollingScript<ClientContext> implements PaintListener,
         }
 
         // Guzzle Rock Cake if HP in range && not overloading && time elapsed since last check decreasing as hp rises.
-        if (!this.overloadRequired && ((ctx.combat.health() != lastGuzzleAttemptHP) || (ctx.combat.health() > 4))) {
+        if (!this.overloadRequired && (this.guzzling || (ctx.combat.health() != lastGuzzleAttemptHP) || (ctx.combat.health() > 4))) {
             if (guzzleRockCake.activate() && getGuzzleChance()) {
+                sleep(Random.nextInt(100, 18000)); // immediately to 18 seconds in the future
+                this.guzzling = true;
                 return State.GUZZLE;
             } else {
                 lastGuzzleAttemptHP = ctx.combat.health();

@@ -31,30 +31,21 @@ public class GuzzleRockCake extends AbstractAction<ClientContext> {
     public void execute() {
         CommonActions.openTab(ctx, Game.Tab.INVENTORY);
 
-        // Forced sleep wait to randomize guzzle times. Breaks if overload is needed while pausing.
-        Condition.wait(new Callable<Boolean>() {
-            @Override
-            public Boolean call() throws Exception {
-                return ctx.combat.health() > 50;
-            }
-        }, AntibanTools.getRandomInRange(500, 2500), (int) (AntibanTools.getRandomInRange(1, 60) / ctx.combat.health()));
-
         if (ctx.combat.health() < 50) {
-            while (ctx.combat.health() > 1) {
-                int h = ctx.combat.health();
-                ctx.inventory.select().id(Items.DWARVEN_ROCK_CAKE_7510).poll().interact("Guzzle");
-                Condition.wait(new Callable<Boolean>() {
-                    @Override
-                    public Boolean call() throws Exception {
-                        return ctx.combat.health() < h;
-                    }
-                }, 100, 10);
-            }
 
-            if (!GaussianTools.takeActionUnlikely() && ctx.combat.health() < 10) {
+            int h = ctx.combat.health();
+            ctx.inventory.select().id(Items.DWARVEN_ROCK_CAKE_7510).poll().interact("Guzzle");
+            Condition.wait(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    return ctx.combat.health() < h;
+                }
+            }, 100, 10);
+
+
+            if (!GaussianTools.takeActionUnlikely() && ctx.combat.health() == 1) {
                 AntibanTools.moveMouseOffScreen(ctx, (AntibanTools.getRandomInRange(0, 1) == 0));
             }
         }
-
     }
 }

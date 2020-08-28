@@ -104,9 +104,7 @@ public class CommonAreas {
     public static Area canifs_fall_2() {return new Area(new Tile(3507, 3474, 0), new Tile(3505, 3480, 0));}
 
 
-    public static Area motherload_nw() {return new Area(new Tile(3733, 5690, 0), new Tile(3720, 5681, 0));}
-    public static Area motherload_nw_rockfalls() {return new Area(new Tile(3729, 5685, 0), new Tile(3739, 5676, 0));}
-
+    public static Area motherload_nw() {return new Area(new Tile(3733, 5690, 0), new Tile(3720, 5684, 0));}
     public static Area motherload_main() {return new Area(new Tile(3737, 5677, 0), new Tile(3759, 5658, 0));}
 
 }

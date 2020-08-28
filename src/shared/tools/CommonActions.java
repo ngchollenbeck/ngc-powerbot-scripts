@@ -1,12 +1,12 @@
 package shared.tools;
 
-import shared.constants.Items;
-import shared.models.LootItem;
 import org.powerbot.script.Condition;
 import org.powerbot.script.Filter;
 import org.powerbot.script.Random;
 import org.powerbot.script.Tile;
 import org.powerbot.script.rt4.*;
+import shared.constants.Items;
+import shared.models.LootItem;
 
 import javax.swing.*;
 import java.awt.*;
@@ -104,7 +104,6 @@ public class CommonActions {
             }
         }
     }
-
 
     /**
      * Valid loot condition (could be moved to loot action
@@ -231,6 +230,21 @@ public class CommonActions {
 
         return new ArrayList<>(new HashSet<>(npcs));
 
+
+    }
+
+    public static void adjustMouseSpeed(ClientContext ctx, int min, int max) {
+        var currentSpeed = ctx.input.speed();
+        var speedOffset = Random.nextInt(-2, 2);
+
+        if (currentSpeed + speedOffset < min || currentSpeed + speedOffset > max) {
+            // Offset pushes out of bounds
+            speedOffset *= -1; // Reverse the value
+        }
+
+        ctx.input.speed(currentSpeed + speedOffset);
+
+        System.out.println("Input Speed: " + currentSpeed + " => " + ctx.input.speed());
 
     }
 
@@ -549,14 +563,147 @@ public class CommonActions {
         Item item = ctx.inventory.select().id(itemId).first().poll();
 
         if (item.valid()) {
-            ctx.input.send("{VK_SHIFT down}");
-            item.click();
-            sleep();
-            ctx.input.send("{VK_SHIFT up}");
-
+            ctx.inventory.drop(item, true);
         }
     }
 
+    public static void hoverItem(ClientContext ctx, int itemId) {
+        Item item = ctx.inventory.select().id(itemId).first().poll();
+
+        if (item.valid()) {
+            ctx.input.move(item.nextPoint());
+        }
+    }
+
+    //endregion
+
+    //region Banking
+    public static boolean openBank(ClientContext ctx) {
+        if (ctx.bank.opened()) return true;
+
+
+        var bankObject = ctx.objects.select().select(new Filter<GameObject>() {
+            @Override
+            public boolean accept(GameObject gameObject) {
+                return gameObject.name().contains("Bank") && !gameObject.name().toLowerCase().contains("deposit");
+            }
+        }).nearest().poll();
+
+        // No booth available
+        if (!bankObject.valid()) return false;
+
+        // Start banking
+        if (bankObject.inViewport()) {
+
+            if (!ctx.bank.opened()) {
+                if (bankObject.name().contains("booth"))
+                    bankObject.interact("Bank");
+                else if (bankObject.name().contains("chest")) {
+                    bankObject.interact("Use");
+                }
+                Condition.wait(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return ctx.bank.opened();
+                    }
+                }, Random.nextInt(100, 200), 50);
+
+                return ctx.bank.opened();
+            }
+        } else {
+            ctx.movement.step(bankObject);
+
+            Condition.wait(new Callable<Boolean>() {
+                @Override
+                public Boolean call() throws Exception {
+                    return bankObject.inViewport();
+                }
+            }, Random.nextInt(100, 200), 50);
+
+            return false;
+        }
+
+        return false;
+    }
+
+    public static boolean depositInventory(ClientContext ctx) {
+        ctx.bank.depositInventory();
+
+        Condition.wait(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return ctx.inventory.select().count() == 0;
+            }
+        }, 100, 20);
+
+        return ctx.inventory.select().count() == 0;
+    }
+
+    public static boolean depositAllExcept(ClientContext ctx, int[] exceptionIds) {
+        if (ctx.bank.withdrawModeQuantity() != Bank.Amount.ALL) {
+            ctx.bank.withdrawModeQuantity(Bank.Amount.ALL);
+        }
+        ctx.bank.depositAllExcept(exceptionIds);
+        return ctx.inventory.select().id(exceptionIds).count() == ctx.inventory.select().count();
+    }
+
+    public static boolean depositAllOfItem_X(ClientContext ctx, int itemId, boolean waitForCompletion) {
+        Item i = ctx.inventory.select().id(itemId).poll();
+
+        if (i.valid()) {
+            if (ctx.bank.withdrawModeQuantity() != Bank.Amount.X) {
+                ctx.bank.withdrawModeQuantity(Bank.Amount.X);
+                sleep();
+            }
+
+            i.click();
+            if (waitForCompletion)
+                Condition.wait(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return !i.valid();
+                    }
+                }, Random.nextInt(100, 200), 10);
+            else
+                sleep();
+        }
+
+        return !i.valid();
+    }
+
+    public static boolean withdrawItem(ClientContext ctx, int itemId, Bank.Amount amount, boolean waitForCompletion) {
+        var success = ctx.bank.withdraw(itemId, amount);
+
+        if (success) {
+            if (waitForCompletion) {
+                Condition.wait(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return ctx.inventory.select().id(itemId).poll().valid();
+                    }
+                }, Random.nextInt(100, 200), 10);
+                return ctx.inventory.select().id(itemId).poll().valid();
+            } else {
+                sleep();
+            }
+        }
+
+        return success;
+    }
+
+    public static boolean closeBank(ClientContext ctx) {
+        ctx.bank.close(true);
+
+        Condition.wait(new Callable<Boolean>() {
+            @Override
+            public Boolean call() throws Exception {
+                return !ctx.bank.opened();
+            }
+        }, 100, 10);
+
+
+        return !ctx.bank.opened();
+    }
     //endregion
 
     //region Slayer Tower
@@ -564,4 +711,6 @@ public class CommonActions {
     public static final int slayerStairsLevelOneId = 2114;
     public static final Tile[] pathToSlayerDoorLevelTwo = {new Tile(3433, 3537, 1), new Tile(3437, 3535, 1), new Tile(3441, 3535, 1), new Tile(3445, 3536, 1), new Tile(3447, 3540, 1), new Tile(3447, 3544, 1), new Tile(3447, 3548, 1), new Tile(3447, 3552, 1), new Tile(3444, 3555, 1), new Tile(3441, 3558, 1), new Tile(3439, 3562, 1), new Tile(3436, 3566, 1), new Tile(3433, 3570, 1), new Tile(3430, 3573, 1), new Tile(3426, 3573, 1), new Tile(3422, 3573, 1), new Tile(3418, 3573, 1), new Tile(3414, 3571, 1), new Tile(3413, 3567, 1), new Tile(3413, 3563, 1), new Tile(3417, 3562, 1), new Tile(3421, 3562, 1), new Tile(3424, 3559, 1), new Tile(3427, 3556, 1)};
     //endregion
+
+    public static final String[] smithingOptions = new String[]{"2-hand sword", "Arrowtips", "Axe", "Battleaxe", "Bolts", "Chain body", "Dagger", "Dart tips", "Full helm", "Javelin heads", "Knives", "Kite Shield", "Limbs", "Long sword", "Mace", "Med helm", "Nails", "Plate body", "Plate legs", "Plate skirt", "Scimitar", "Square Shield", "Studs", "Sword", "Warhammer"};
 }

@@ -18,7 +18,7 @@ public class GuiHelper {
     private static final int dialogWidth = 514;
     private static final int dialogHeight = 128;
 
-    private static final Color baseColor = new Color(0, 0, 0, 180);
+    private static final Color baseColor = new Color(0, 0, 0, 120);
     private static final Color baseColorDark = new Color(0, 0, 0);
 
     private static final Color textColorWhite = Color.WHITE;

@@ -42,7 +42,7 @@ public class ScriptConfig {
         this.toggleLevelUp = new ToggleLevelUp(this.ctx);
         this.toggleRunAction = new ToggleRunAction(this.ctx, "Run", 30);
 
-        this.invRect = ctx.widgets.component(7, 0).boundingRect();
+        this.invRect = ctx.widgets.component(162, 0).boundingRect();
 
     }
 
@@ -108,5 +108,12 @@ public class ScriptConfig {
     }
     public int paintLineX(){
         return invRect.x + 10;
+    }
+    public int paintLineXMiddle(){
+        return invRect.x + (invRect.width/2) + 10;
+    }
+
+    public boolean levelUpPromptVisible(){
+        return this.toggleLevelUp.activate();
     }
 }

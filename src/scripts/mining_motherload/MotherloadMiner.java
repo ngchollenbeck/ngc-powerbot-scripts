@@ -1,11 +1,8 @@
 package scripts.mining_motherload;
 
-
 import org.powerbot.script.*;
+import org.powerbot.script.rt4.*;
 import org.powerbot.script.rt4.ClientContext;
-import org.powerbot.script.rt4.Constants;
-import org.powerbot.script.rt4.Game;
-import org.powerbot.script.rt4.GameObject;
 import shared.action_config.ScriptConfig;
 import shared.constants.Items;
 import shared.tools.*;
@@ -16,25 +13,43 @@ import java.util.concurrent.Callable;
 import static java.lang.Integer.parseInt;
 import static org.powerbot.script.Condition.sleep;
 
-@Script.Manifest(name = "Mining - Motherload", description = "Fletches bolt tips at a bank", properties = "client=4; topic=051515; author=Bowman")
+/*
+TODO:
+- Improve pathing for running back to hopper
+- Allow for breaking landslides to reach nearest ore vein
+- Build routines for NE and SW corners
+ */
+
+@Script.Manifest(name = "Mining - Motherload", description = "Mines pay dirt, fixes water wheel, and banks ores", properties = "client=4; topic=051515; author=Bowman")
 public class MotherloadMiner extends PollingScript<ClientContext> implements MessageListener, PaintListener {
 
     // Config
     private final ScriptConfig scriptConfig = new ScriptConfig(ctx);
     private Tile veinTile;
-    private boolean playerIsMining;
+    private Tile lastVeinTile;
+    private boolean isPlayerMining;
     private int payDirtSackCount;
-    private int lastOrientation;
+
+    private int lastVeinTileX;
+    private int lastVeinTileY;
 
     private final int[] droppables = new int[]{Items.UNCUT_DIAMOND_1617, Items.UNCUT_RUBY_1619, Items.UNCUT_EMERALD_1621, Items.UNCUT_SAPPHIRE_1623};
     private final int[] ores = new int[]{Items.GOLD_ORE_444, Items.ADAMANTITE_ORE_449, Items.COAL_453, Items.MITHRIL_ORE_447, Items.RUNITE_ORE_451};
 
     private final Tile[] pathFromNWCorner = {new Tile(3728, 5685, 0), new Tile(3730, 5684, 0), new Tile(3732, 5680, 0), new Tile(3736, 5678, 0), new Tile(3738, 5675, 0), new Tile(3741, 5673, 0), new Tile(3744, 5673, 0), new Tile(3747, 5673, 0), new Tile(3750, 5672, 0), new Tile(3750, 5669, 0), new Tile(3750, 5666, 0)};
-    private final Tile[] pathToNWCorner = {new Tile(3750, 5666, 0), new Tile(3750, 5669, 0), new Tile(3750, 5672, 0), new Tile(3747, 5673, 0), new Tile(3744, 5673, 0), new Tile(3741, 5673, 0), new Tile(3738, 5675, 0), new Tile(3736, 5678, 0), new Tile(3733, 5680, 0), new Tile(3730, 5683, 0), new Tile(3728, 5685, 0)};
+    private final Tile[] pathToNWCorner = {new Tile(3750, 5666, 0), new Tile(3750, 5669, 0), new Tile(3750, 5672, 0), new Tile(3747, 5673, 0), new Tile(3744, 5673, 0), new Tile(3741, 5673, 0), new Tile(3738, 5675, 0), new Tile(3736, 5678, 0), new Tile(3733, 5680, 0), new Tile(3730, 5683, 0)};
+
+    private int actionsToLevel;
+
     private final Tile nwRockfallTile1 = new Tile(3731, 5683, 0);
     private final Tile nwRockfallTile2 = new Tile(3733, 5680, 0);
     private final Tile nwRockfallTile3 = new Tile(3727, 5683, 0);
     private final Tile nwRockfallTile4 = new Tile(3745, 5689, 0);
+
+    private enum MiningArea {
+        NW,
+        SW
+    }
 
     //region Antiban
     private long nextBreak;
@@ -54,8 +69,12 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
         this.scriptConfig.setPhase("Mining");
 
         this.setOreVein();
-        this.playerIsMining = ctx.players.local().animation() == 6752;
-        this.lastOrientation = -1;
+        this.isPlayerMining = ctx.players.local().animation() == 6752;
+
+        this.veinTile = new Tile(1, 1, 0);
+        this.lastVeinTile = new Tile(1, 1, 0);
+        this.lastVeinTileX = ctx.players.local().tile().x();
+        this.lastVeinTileY = ctx.players.local().tile().y();
 
         this.updatePayDirtCount();
 
@@ -78,8 +97,10 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
         String msg = e.text();
 
         if (msg.contains("swing your pick at the rock.")) {
-            this.playerIsMining = true;
+            this.isPlayerMining = true;
         }
+
+        this.updateXPRates();
     }
     //endregion
 
@@ -91,7 +112,8 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
             g.drawString("Phase  : " + (this.scriptConfig.getPhase()), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(1));
             g.drawString("Runtime: " + GuiHelper.getReadableRuntime(getRuntime()), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(2));
-            g.drawString("Level: " + ctx.skills.realLevel(Constants.SKILLS_MINING), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(4));
+            g.drawString("Level  : " + ctx.skills.realLevel(Constants.SKILLS_MINING), this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(4));
+            g.drawString("To Lvl : " + actionsToLevel, this.scriptConfig.paintLineX(), this.scriptConfig.paintLineY(5));
         }
     }
     //endregion
@@ -118,13 +140,24 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 return Phase.Mining;
 
             case Mining:
-                if (ctx.inventory.isFull()) {
-                    this.playerIsMining = false;
+                // Inventory full and no gems
+                if (ctx.inventory.isFull() && !ctx.inventory.select().select(new Filter<Item>() {
+                    @Override
+                    public boolean accept(Item item) {
+                        return item.name().contains("Uncut");
+                    }
+                }).poll().valid()) {
+                    this.isPlayerMining = false;
+                    if (GaussianTools.takeActionLikely()) {
+                        ctx.camera.pitch(Random.nextInt(50, 90));
+                        ctx.camera.angle(Random.nextInt(150, 220));
+                    }
                     return Phase.ToHopper;
                 }
                 break;
 
             case ToHopper:
+                // Invent
                 if (this.isHopperInView()) {
                     return Phase.Processing;
                 }
@@ -132,7 +165,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
             case Processing:
                 this.updatePayDirtCount();
-                if (this.payDirtSackCount > 52 && !ctx.inventory.isFull()) {
+                if (this.payDirtSackCount > 50 && !ctx.inventory.isFull()) {
                     return Phase.Banking;
                 }
 
@@ -149,7 +182,8 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 break;
 
             case ToOreVeins:
-                if (CommonAreas.motherload_nw().contains(ctx.players.local()) || playerIsMining) {
+                if (CommonAreas.motherload_nw().contains(ctx.players.local()) || isPlayerMining) {
+                    if (GaussianTools.takeActionLikely()) ctx.camera.pitch(Random.nextInt(40, 80));
                     return Phase.Mining;
                 }
                 break;
@@ -171,15 +205,23 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                 if (ctx.inventory.select().id(droppables).count() > 0) {
                     CommonActions.openTab(ctx, Game.Tab.INVENTORY);
                     CommonActions.dropItem(ctx, ctx.inventory.select().id(droppables).first().poll().id());
+                    this.isPlayerMining = false;
                 }
 
                 if (!ctx.inventory.isFull()) {
                     if (!isOreVeinValid()) {
-                        this.playerIsMining = false;
+                        Condition.wait(new Callable<Boolean>() {
+                            @Override
+                            public Boolean call() throws Exception {
+                                return ctx.players.local().animation() != -1;
+                            }
+                        }, 50, 20);
+
+                        this.isPlayerMining = ctx.players.local().animation() != -1;
                         this.setOreVein();
                     }
 
-                    if (!this.playerIsMining) {
+                    if (!this.isPlayerMining) {
                         this.executeMinePayDirt();
                     }
                 }
@@ -217,15 +259,28 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
             case Banking:
                 this.scriptConfig.setPhase("Bank");
+                // Loot any powermined ores
+                GroundItem oreOnGround = ctx.groundItems.select().id(ores).viewable().poll();
+                if (oreOnGround.valid() && !ctx.inventory.isFull()) {
+                    oreOnGround.interact("Take");
+                    Condition.wait(new Callable<Boolean>() {
+                        @Override
+                        public Boolean call() throws Exception {
+                            return !oreOnGround.valid();
+                        }
+                    }, Random.nextInt(50, 100), 10);
+                } else
+                    // withdraw from sack
+                    if (ctx.inventory.select().id(ores).count() == 0) {
+                        if (payDirtSackCount > 0)
+                            emptySack();
+                    } else {
+                        // deposit into deposit box
+                        System.out.println("Banking");
+                        depositInventory();
+                        sleep();
 
-                // withdraw from sack
-                if (ctx.inventory.select().id(ores).count() == 0 && payDirtSackCount > 0) {
-                    emptySack();
-
-                } else {
-                    // deposit into deposit box
-                    depositInventory();
-                }
+                    }
                 break;
 
             case ToOreVeins:
@@ -262,12 +317,10 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
         if (vein.valid()) {
 
-            // Is this vein visible?
-            if (vein.inViewport()) {
+            this.turnCameraToOre(vein.tile());
 
-                if (this.lastOrientation != vein.orientation()) {
-                    ctx.camera.turnTo(vein);
-                }
+            // Is this vein visible?
+            if (vein.inViewport() && vein.tile().distanceTo(ctx.players.local()) < 6) {
 
                 // Mine the vein
                 Point tileCenter = vein.tile().matrix(ctx).centerPoint();
@@ -279,8 +332,6 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                     String action = ctx.menu.items()[0].split(" ")[0];
 
                     if (action.equals("Mine")) {
-                        this.lastOrientation = vein.orientation();
-
                         ctx.input.click(ovp, true);
 
                         Condition.wait(new Callable<Boolean>() {
@@ -288,16 +339,16 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                             public Boolean call() throws Exception {
                                 return ctx.players.local().inMotion();
                             }
-                        }, Random.nextInt(175, 300), 10);
+                        }, Random.nextInt(375, 600), 20);
 
                         Condition.wait(new Callable<Boolean>() {
                             @Override
                             public Boolean call() throws Exception {
-                                return !playerIsMining || !ctx.players.local().inMotion();
+                                return vein.tile().distanceTo(ctx.players.local()) == 1 || !ctx.players.local().inMotion();
                             }
-                        }, Random.nextInt(400, 800), 10);
+                        }, Random.nextInt(400, 800), 20);
 
-                        if (playerIsMining) {
+                        if (isPlayerMining) {
 
                             if (!GaussianTools.takeActionNormal()) {
                                 AntibanTools.moveMouseOffScreen(ctx, true);
@@ -307,7 +358,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
                             Condition.wait(new Callable<Boolean>() {
                                 @Override
                                 public Boolean call() throws Exception {
-                                    return !isOreVeinValid() || !playerIsMining || ctx.inventory.isFull(); // not valid or couldn't reach it due to landslide
+                                    return !isOreVeinValid() || !isPlayerMining || ctx.inventory.isFull(); // not valid or couldn't reach it due to landslide
 
                                 }
                             }, Random.nextInt(1000, 2000), 65);
@@ -333,19 +384,18 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
         GameObject vein = ctx.objects.select().name("Ore vein").select(new Filter<GameObject>() {
             @Override
             public boolean accept(GameObject gameObject) {
-                Tile westTile = new Tile(gameObject.tile().x() + 1, gameObject.tile().y(), gameObject.tile().floor());
-                Tile eastTile = new Tile(gameObject.tile().x() - 1, gameObject.tile().y(), gameObject.tile().floor());
-                Tile northTile = new Tile(gameObject.tile().x(), gameObject.tile().y() + 1, gameObject.tile().floor());
-                Tile southTile = new Tile(gameObject.tile().x(), gameObject.tile().y() - 1, gameObject.tile().floor());
-
-                // Reachable and not occupied
-                return (westTile.matrix(ctx).reachable() && !ctx.players.at(westTile).poll().valid()) ||
-                        (eastTile.matrix(ctx).reachable() && !ctx.players.at(eastTile).poll().valid()) ||
-                        (northTile.matrix(ctx).reachable() && !ctx.players.at(northTile).poll().valid()) ||
-                        (southTile.matrix(ctx).reachable() && !ctx.players.at(southTile).poll().valid());
+                return objectIsValid(gameObject, false) &&
+                        (gameObject.tile().x() < 3726 || gameObject.tile().x() > 3731);
             }
         }).nearest().poll();
 
+        if (vein.inViewport()) { // Prevents stepping to vein from disrupting the camera
+            this.lastVeinTile = this.veinTile;
+            if (this.veinTile != null) {
+                this.lastVeinTileX = this.veinTile.x();
+                this.lastVeinTileY = this.veinTile.y();
+            }
+        }
         this.veinTile = vein.tile();
     }
 
@@ -376,6 +426,8 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
         sleep(Random.nextInt(250, 1250));
 
+        //this.lastVeinTile = new Tile(1, 1, 0);
+
         if (ctx.inventory.select().id(Items.HAMMER_2347).count() == 0) {
             var box = ctx.objects.select().name("Crate").nearest().poll();
 
@@ -401,7 +453,7 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
     private boolean isStrutBroken() {
         GameObject strut = ctx.objects.select().name("Broken strut").nearest().poll();
 
-        return strut.valid() && strut.tile().y() > 5665;
+        return strut.valid() && strut.tile().y() > 5665 && ctx.inventory.select().id(Items.HAMMER_2347).poll().valid();
     }
 
     private void repairBrokenStrut() {
@@ -451,38 +503,11 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
     }
 
     private void depositInventory() {
-        GameObject depositBox = ctx.objects.select().name("Bank deposit box").poll();
 
-        if (depositBox.inViewport() && !ctx.inventory.isEmpty()) {
-            depositBox.interact("Deposit");
-
-            Condition.wait(new Callable<Boolean>() {
-                @Override
-                public Boolean call() throws Exception {
-                    return ctx.depositBox.opened();
-                }
-            }, Random.nextInt(400, 600), 10);
-
-            sleep();
-
-            ctx.depositBox.depositInventory();
-
-            Condition.wait(new Callable<Boolean>() {
-                @Override
-                public Boolean call() throws Exception {
-                    return ctx.inventory.isEmpty() || ctx.depositBox.isEmpty();
-                }
-            }, Random.nextInt(150, 300), 10);
-
-            ctx.depositBox.close();
-        } else {
-            ctx.movement.step(depositBox);
-            Condition.wait(new Callable<Boolean>() {
-                @Override
-                public Boolean call() throws Exception {
-                    return depositBox.inViewport();
-                }
-            }, Random.nextInt(100, 200), 10);
+        if (CommonActions.openBank(ctx)) {
+            if (CommonActions.depositAllExcept(ctx, new int[]{Items.HAMMER_2347})) {
+                CommonActions.closeBank(ctx);
+            }
         }
     }
     //endregion
@@ -500,41 +525,102 @@ public class MotherloadMiner extends PollingScript<ClientContext> implements Mes
 
     private void travelPath(Tile[] path) {
         Tile nextTile = ctx.movement.newTilePath(path).next();
-        GameObject rockFall = getValidRockfall();
+        GameObject rockFall = getRockfallsOnNwPath();
 
         if (rockFall.valid() && !CommonAreas.motherload_main().contains(ctx.players.local())) {
             if (!rockFall.inViewport()) {
-                ctx.camera.turnTo(rockFall);
-            }
-            rockFall.interact("Mine");
+                if (rockFall.tile().distanceTo(ctx.players.local()) > 3) {
+                    ctx.movement.step(rockFall);
+                    Condition.wait(new Callable<Boolean>() {
+                        @Override
+                        public Boolean call() throws Exception {
+                            return rockFall.inViewport();
+                        }
+                    }, Random.nextInt(150, 250), 20);
+                } else
+                    ctx.camera.turnTo(rockFall);
+            } else {
+                rockFall.interact("Mine");
 
+                Condition.wait(new Callable<Boolean>() {
+                    @Override
+                    public Boolean call() throws Exception {
+                        return !rockFall.valid();
+                    }
+                }, Random.nextInt(200, 321), 20);
+            }
+        } else if (nextTile != null && nextTile.matrix(ctx).reachable() && nextTile.distanceTo(ctx.players.local()) != 0) {
+            ctx.movement.newTilePath(path).traverse();
             Condition.wait(new Callable<Boolean>() {
                 @Override
                 public Boolean call() throws Exception {
-                    return !rockFall.valid();
+                    return rockFall.inViewport() || !ctx.players.local().inMotion() || isHopperInView();
                 }
-            }, Random.nextInt(200, 321), 20);
-        }
-
-
-        if (nextTile != null && nextTile.matrix(ctx).reachable() && nextTile.distanceTo(ctx.players.local()) != 0) {
-            ctx.movement.newTilePath(path).traverse();
+            }, Random.nextInt(250, 300), 10);
         }
     }
 
-    private GameObject getValidRockfall() {
+    private GameObject getRockfallsOnNwPath() {
         return ctx.objects.select().name("Rockfall").select(new Filter<GameObject>() {
             @Override
             public boolean accept(GameObject gameObject) {
                 Tile t = gameObject.tile();
 
-                return t.distanceTo(nwRockfallTile1) == 0 ||
-                        t.distanceTo(nwRockfallTile2) == 0 ||
-                        (t.distanceTo(nwRockfallTile3) == 0 && ctx.players.local().tile().y() < nwRockfallTile3.y()) ||
-                        (t.distanceTo(nwRockfallTile4) == 0 && ctx.players.local().tile().y() > 5688 && ctx.players.local().tile().x() > nwRockfallTile4.x()) ||
-                        t.distanceTo(ctx.players.local()) < 3;
+                return (t.distanceTo(nwRockfallTile1) == 0 ||
+                        t.distanceTo(nwRockfallTile2) == 0) &&
+                        objectIsValid(gameObject, false);
             }
         }).nearest().poll();
+    }
+
+    private void turnCameraToOre(Tile oreTile) {
+
+        int xOffset = Math.abs((this.lastVeinTileX - oreTile.x()));
+        int yOffset = Math.abs((this.lastVeinTileY - oreTile.y()));
+        int validOffset = 2;
+
+//        if (this.lastVeinTile.x() == 1 && this.lastVeinTile.y() == 1) {
+//            ctx.camera.turnTo(oreTile);
+//        }
+
+        if (xOffset > validOffset && yOffset <= validOffset) {
+            if (oreTile.x() > lastVeinTile.x()) {
+                ctx.camera.angle('e');
+            } else {
+                ctx.camera.angle('w');
+            }
+        }
+
+        if (xOffset <= validOffset && yOffset > validOffset) {
+            if (oreTile.y() > lastVeinTile.y()) {
+                ctx.camera.angle('n');
+            } else {
+                ctx.camera.angle('s');
+            }
+
+        }
+    }
+
+    //endregion
+
+    //region Helpers
+    private boolean objectIsValid(GameObject gameObject, boolean ignorePlayers) {
+        Tile westTile = new Tile(gameObject.tile().x() + 1, gameObject.tile().y(), gameObject.tile().floor());
+        Tile eastTile = new Tile(gameObject.tile().x() - 1, gameObject.tile().y(), gameObject.tile().floor());
+        Tile northTile = new Tile(gameObject.tile().x(), gameObject.tile().y() + 1, gameObject.tile().floor());
+        Tile southTile = new Tile(gameObject.tile().x(), gameObject.tile().y() - 1, gameObject.tile().floor());
+
+        // Reachable and not occupied
+        return (westTile.matrix(ctx).reachable() && (ignorePlayers || !ctx.players.select().at(westTile).poll().valid())) ||
+                (eastTile.matrix(ctx).reachable() && (ignorePlayers || !ctx.players.at(eastTile).poll().valid())) ||
+                (northTile.matrix(ctx).reachable() && (ignorePlayers || !ctx.players.at(northTile).poll().valid())) ||
+                (southTile.matrix(ctx).reachable() && (ignorePlayers || !ctx.players.at(southTile).poll().valid()));
+    }
+
+    private void updateXPRates() {
+        int currentXP = ctx.skills.experience(Constants.SKILLS_MINING);
+        int nextLevelXP = ctx.skills.experienceAt(ctx.skills.realLevel(Constants.SKILLS_MINING) + 1);
+        this.actionsToLevel = (nextLevelXP - currentXP) / 60;
     }
     //endregion
 }

@@ -15,6 +15,12 @@ import static org.powerbot.script.Condition.sleep;
  */
 public class AntibanTools {
 
+    public static long setNextBreakTime(long runTime, int minMinutes, int maxMinutes) {
+        var nextDiff = getRandomInRange(minMinutes * 1000, maxMinutes * 1000) * 60;
+
+        return runTime + nextDiff;
+    }
+
     /**
      * Common action replica of open tab behavior
      *
@@ -249,13 +255,13 @@ public class AntibanTools {
             x = -10;
         } else {
             // Right side (for inventory actions)
-            x = 1000;
+            x = 5000;
         }
 
-        int y = Random.nextInt(-10, (int)(ctx.widgets.component(165, 30).height() * 1.25));
+        int y = Random.nextInt(-10, (int) (ctx.widgets.component(165, 30).height() * 1.25));
 
         ctx.input.move(new Point(x, y));
-        sleepDelay(Random.nextInt(0,5));
+        sleepDelay(Random.nextInt(0, 5));
         ctx.input.defocus();
     }
 
@@ -315,39 +321,135 @@ public class AntibanTools {
         ctx.widgets.widget(160).component(1).click();
     }
 
-    public static void runCommonAntiban(ClientContext ctx){
-        switch(Random.nextInt(0, 11)){
-            case 1: toggleRun(ctx); break;
-            case 2: moveMouseOffScreen(ctx, true); break;
-          //  case 3: checkStat(ctx, getRandomInRange(0,23)); break;
-            case 4: moveMouseOffScreen(ctx, false); break;
-           // case 5: checkStat(ctx, getRandomInRange(0,4)); break;
-            case 6: resetCamera(ctx); break;
-            case 7: hoverRandomNPC(ctx); break;
-            case 8: setRandomCameraAngle(ctx); break;
-            case 9: setRandomCameraPitch(ctx); break;
-            case 10: jiggleMouse(ctx); break;
-            default:doNothing();
+    public static void moveMouseToRandomPoint(ClientContext ctx) {
+        ctx.input.move(ctx.widgets.widget(122).component(0).nextPoint());
+        sleepDelay(AntibanTools.getRandomInRange(1, 3));
+    }
+
+    public static void hoverRandomInventoryItem(ClientContext ctx) {
+        var allItems = ctx.inventory.items();
+        var rndmItem = allItems[Random.nextInt(0, allItems.length - 1)];
+
+        ctx.input.move(rndmItem.nextPoint());
+        sleepDelay(AntibanTools.getRandomInRange(1, 3));
+
+    }
+
+    public static void toggleGameChat(ClientContext ctx) {
+        ctx.widgets.widget(162).component(10).click();
+        sleep();
+    }
+
+    public static void togglePublicCHat(ClientContext ctx) {
+        ctx.widgets.widget(162).component(13).click();
+        sleep();
+    }
+
+    public static void runCommonAntiban(ClientContext ctx) {
+        switch (AntibanTools.getRandomInRange(1, 14)) {
+            case 1:
+                toggleRun(ctx);
+                break;
+            case 2:
+                moveMouseOffScreen(ctx, true);
+                break;
+            case 3:
+                toggleXPDrops(ctx);
+                break;
+            case 4:
+                moveMouseOffScreen(ctx, false);
+                break;
+            case 5:
+                moveMouseToRandomPoint(ctx);
+                break;
+            case 6:
+                resetCamera(ctx);
+                break;
+            case 7:
+                hoverRandomNPC(ctx);
+                break;
+            case 8:
+                setRandomCameraAngle(ctx);
+                break;
+            case 9:
+                setRandomCameraPitch(ctx);
+                break;
+            case 10:
+                jiggleMouse(ctx);
+                break;
+            case 11:
+                hoverRandomInventoryItem(ctx);
+                break;
+            case 12:
+                togglePublicCHat(ctx);
+                break;
+            case 13:
+                toggleGameChat(ctx);
+                break;
+            default:
+                doNothing();
         }
     }
 
-    public static void runAgilityAntiban(ClientContext ctx){
-        switch(AntibanTools.getRandomInRange(1, 5)){
-            case 1: moveMouseOffScreen(ctx, true); break;
-            case 2: moveMouseOffScreen(ctx, false); break;
-            case 3: hoverRandomNPC(ctx); break;
-            case 4: jiggleMouse(ctx); break;
-            default:doNothing();
+    public static void runAgilityAntiban(ClientContext ctx) {
+        switch (AntibanTools.getRandomInRange(1, 9)) {
+            case 1:
+                moveMouseOffScreen(ctx, true);
+                break;
+            case 2:
+                moveMouseOffScreen(ctx, false);
+                break;
+            case 3:
+                hoverRandomNPC(ctx);
+                break;
+            case 4:
+                jiggleMouse(ctx);
+                break;
+            case 5:
+                hoverRandomInventoryItem(ctx);
+                break;
+            case 6:
+                moveMouseToRandomPoint(ctx);
+                break;
+            case 7:
+                toggleGameChat(ctx);
+                break;
+            case 8:
+                togglePublicCHat(ctx);
+                break;
+            default:
+                doNothing();
         }
     }
 
-    public static void runMiningAntiban(ClientContext ctx){
-        switch(AntibanTools.getRandomInRange(1, 5)){
-            case 1: moveMouseOffScreen(ctx, true); break;
-            case 2: moveMouseOffScreen(ctx, false); break;
-            case 3: hoverRandomNPC(ctx); break;
-            case 4: jiggleMouse(ctx); break;
-            default:doNothing();
+    public static void runMiningAntiban(ClientContext ctx) {
+        switch (AntibanTools.getRandomInRange(1, 9)) {
+            case 1:
+                moveMouseOffScreen(ctx, true);
+                break;
+            case 2:
+                moveMouseOffScreen(ctx, false);
+                break;
+            case 3:
+                hoverRandomNPC(ctx);
+                break;
+            case 4:
+                jiggleMouse(ctx);
+                break;
+            case 5:
+                hoverRandomInventoryItem(ctx);
+                break;
+            case 6:
+                moveMouseToRandomPoint(ctx);
+                break;
+            case 7:
+                toggleGameChat(ctx);
+                break;
+            case 8:
+                togglePublicCHat(ctx);
+                break;
+            default:
+                doNothing();
         }
     }
 }
